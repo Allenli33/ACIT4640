@@ -26,7 +26,7 @@ terraform init
 terraform apply
 ```
 
-**_infra_**: this folder include 4 moudles
+**_infra_**: this folder include 4 modules
 
 -ec2
 -RDS
