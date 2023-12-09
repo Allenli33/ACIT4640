@@ -1,0 +1,130 @@
+- name: Include variable files (host and db endpoint)
+  include_vars: "../../../group_vars/variables.yml"
+
+- name: Install packages
+  ansible.builtin.apt:
+    name:
+      - python3-pymysql
+      - git
+      - libmysqlclient-dev
+      - pkg-config
+      - python3-dev
+      - python3-pip
+    state: present
+  become: true
+
+- name: Create application database
+  community.mysql.mysql_db:
+    name: "{{ db_name }}"
+    state: present
+    login_host: "{{ database_endpoint }}"
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Create application user and grant all privileges on the database
+  community.mysql.mysql_user:
+    name: "{{ db_user }}"
+    host: '%'
+    password: "{{ db_user_password }}"
+    priv: "{{ db_name }}.*:ALL"
+    state: present
+    login_host: "{{ database_endpoint }}"
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+
+- name: Create table for the application and insert initial data
+  community.mysql.mysql_query:
+    login_host: "{{ database_endpoint }}"
+    login_user: "{{ db_user }}"
+    login_password: "{{ db_user_password }}"
+    query: 
+      - "USE {{ db_name }};"
+      - >
+        CREATE TABLE IF NOT EXISTS item (
+          name varchar(30) NOT NULL,
+          bcit_id varchar(10) NOT NULL,
+          PRIMARY KEY (bcit_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      - "INSERT IGNORE INTO item (name, bcit_id) VALUES ('demo', 'A00123456');"
+
+- name: Create a group for the application
+  ansible.builtin.group:
+    name: "backend"
+    state: present
+  become: true
+
+- name: Create an OS user for the application
+  ansible.builtin.user:
+    name: "backend"
+    system: yes
+    group: "backend"
+    shell: "/bin/bash"
+    create_home: yes
+    home: "/home/backend"
+    state: present
+  become: true  
+
+- name: Clone application code from repository
+  ansible.builtin.git:
+    repo: https://github.com/timoguic/acit4640-py-mysql.git
+    dest: "/backend/src"
+    version: "master"
+    clone: yes
+    update: no
+  become: true
+
+- name: Copy application files to appropriate locations
+  ansible.builtin.copy:
+    src: /backend/src/backend
+    dest: /home/backend
+    owner: "backend"
+    group: "backend"
+    mode: '0755'
+    remote_src: yes
+  become: true
+
+- name: Ensure backend user owns its home directory
+  file:
+    path: "/home/backend"
+    state: directory
+    owner: "backend"
+    group: "backend"
+    mode: '0755'
+    recurse: yes
+  become: true
+
+- name: Install Python dependency packages
+  environment:
+    HOME: "/home/backend"
+  ansible.builtin.pip:
+    executable: pip3
+    requirements: /home/backend/backend/requirements.txt
+    extra_args: "--user --break-system-packages"
+  register: pip_output
+  become: true
+
+   
+- name: Show pip install output
+  ansible.builtin.debug:
+    var: pip_output
+
+- name: Configure backend via config file
+  ansible.builtin.template:
+    src: backend.conf.j2
+    dest: /home/backend/backend/backend.conf
+  become: true
+
+- name: Create systemd service file from template
+  template:
+    src: example.service.j2
+    dest: /etc/systemd/system/example.service
+  notify: reload systemd and restart service
+  become: true
+
+- name: Enable and start the example service
+  systemd:
+    name: example.service
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: true

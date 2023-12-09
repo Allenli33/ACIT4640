@@ -1,0 +1,19 @@
+---
+- name: Install all troubleshooting packages on all hosts
+  hosts: all
+  roles:
+    - common
+
+
+
+- name: Configure backend services
+  hosts: backend
+  become: true
+  roles:
+    - backend
+
+- name: Configure frontend services
+  hosts: web
+  become: true
+  roles:
+    - web

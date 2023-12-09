@@ -1,0 +1,9 @@
+---
+mysql_root_password: "password"
+db_user: "dbuser"
+db_name: "application"
+db_user_password: 'password'
+description: 'Example Python backend'
+working_directory: '/home/backend/backend'
+service_user: 'backend'
+exec_start: '/home/backend/.local/bin/gunicorn wsgi:app -b 0.0.0.0:5000 --timeout 120'
